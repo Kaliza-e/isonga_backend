@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import { AreaLevel, AdministrativeArea } from '@prisma/client';
+import { AreaLevel, AdministrativeArea} from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AreasService } from './areas.service';
 
@@ -226,3 +226,4 @@ describe('AreasService', () => {
     });
   });
 });
+

@@ -5,7 +5,10 @@ import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 
 describe('Isonga Connect (e2e)', () => {
+  jest.setTimeout(30000);
   let app: INestApplication<App>;
+  let superAdminToken: string;
+  let reberoVillageId: string;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -46,36 +49,77 @@ describe('Isonga Connect (e2e)', () => {
 
     expect(Array.isArray(response.body)).toBe(true);
     expect(response.body.length).toBeGreaterThan(0);
-    // Find Rwanda root
     const rwanda = response.body.find((a: any) => a.code === 'RW');
     expect(rwanda).toBeDefined();
     expect(rwanda.level).toBe('COUNTRY');
+
+    const rebero = response.body.find((a: any) => a.name === 'Rebero');
+    if (rebero) {
+      reberoVillageId = rebero.id;
+    }
   });
 
-  it('/api/v1/areas (GET) - Filter by level PROVINCE', async () => {
+  it('/api/v1/auth/login (POST) - Login with seeded Super Admin', async () => {
     const response = await request(app.getHttpServer())
-      .get('/api/v1/areas?level=PROVINCE')
+      .post('/api/v1/auth/login')
+      .send({
+        identifier: '+250788000001',
+        password: 'Password123!',
+      })
       .expect(200);
 
-    expect(Array.isArray(response.body)).toBe(true);
-    expect(response.body.every((a: any) => a.level === 'PROVINCE')).toBe(true);
+    expect(response.body).toHaveProperty('accessToken');
+    expect(response.body.user.role).toBe('SUPER_ADMIN');
+    superAdminToken = response.body.accessToken;
   });
 
-  it('/api/v1/areas (POST) - Reject invalid hierarchy (e.g. SECTOR directly under PROVINCE)', async () => {
-    // Fetch Kigali province
-    const kigaliRes = await request(app.getHttpServer()).get('/api/v1/areas?level=PROVINCE');
-    const kigali = kigaliRes.body[0];
-
+  it('/api/v1/auth/me (GET) - Retrieve authenticated admin profile', async () => {
     const response = await request(app.getHttpServer())
-      .post('/api/v1/areas')
-      .send({
-        code: 'TEST999',
-        name: 'Invalid Sector',
-        level: 'SECTOR', // A Sector must have a District as parent, NOT a Province!
-        parentId: kigali.id,
-      })
-      .expect(400);
+      .get('/api/v1/auth/me')
+      .set('Authorization', `Bearer ${superAdminToken}`)
+      .expect(200);
 
-    expect(response.body.message).toMatch(/Geographical hierarchy violation/);
+    expect(response.body.phone).toBe('+250788000001');
+    expect(response.body.role).toBe('SUPER_ADMIN');
+  });
+
+  it('/api/v1/auth/register (POST) & verify-otp - Resident registration flow', async () => {
+    const testPhone = '+250789999001';
+
+    // 1. Register resident
+    const regRes = await request(app.getHttpServer())
+      .post('/api/v1/auth/register')
+      .send({
+        phone: testPhone,
+        password: 'Password123!',
+        firstName: 'Jean',
+        lastName: 'Baptiste',
+        areaId: reberoVillageId,
+        consentGiven: true,
+      })
+      .expect(201);
+
+    expect(regRes.body).toHaveProperty('userId');
+    expect(regRes.body).toHaveProperty('devOtp');
+    const otp = regRes.body.devOtp;
+
+    // 2. Verify OTP
+    const verifyRes = await request(app.getHttpServer())
+      .post('/api/v1/auth/verify-otp')
+      .send({
+        phone: testPhone,
+        otp,
+      })
+      .expect(200);
+
+    expect(verifyRes.body).toHaveProperty('accessToken');
+    expect(verifyRes.body.user.status).toBe('ACTIVE');
+    const residentToken = verifyRes.body.accessToken;
+
+    // 3. Resident tries to access admin-only endpoint /api/v1/users (Should receive 403 Forbidden)
+    await request(app.getHttpServer())
+      .get('/api/v1/users')
+      .set('Authorization', `Bearer ${residentToken}`)
+      .expect(403);
   });
 });

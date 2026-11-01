@@ -35,3 +35,4 @@ export class CreateAreaDto {
   @IsString()
   parentId?: string;
 }
+

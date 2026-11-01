@@ -104,3 +104,4 @@ export class AreasController {
     return this.areasService.getAncestors(id);
   }
 }
+

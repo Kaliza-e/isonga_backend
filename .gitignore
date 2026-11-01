@@ -7,8 +7,15 @@
 
 # Environment & Secrets (NEVER COMMIT)
 .env
+.env.production
 .env.local
 .env.*.local
+
+docker.compose.yml
+docker.compose.yml.production
+docker.compose.yml.local
+docker.compose.yml.*.local
+
 
 # Logs
 npm-debug.log*

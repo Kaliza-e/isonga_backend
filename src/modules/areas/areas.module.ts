@@ -8,3 +8,4 @@ import { AreasService } from './areas.service';
   exports: [AreasService],
 })
 export class AreasModule {}
+

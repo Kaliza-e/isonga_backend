@@ -25,3 +25,4 @@ export class QueryAreaDto {
   @IsString()
   search?: string;
 }
+
