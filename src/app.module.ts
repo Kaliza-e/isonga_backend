@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import configuration from './config/configuration';
 import { PrismaModule } from './prisma/prisma.module';
 import { HealthModule } from './health/health.module';
+import { AreasModule } from './modules/areas/areas.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
@@ -14,6 +15,7 @@ import { AppService } from './app.service';
     }),
     PrismaModule,
     HealthModule,
+    AreasModule,
   ],
   controllers: [AppController],
   providers: [AppService],

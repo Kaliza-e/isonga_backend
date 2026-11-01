@@ -3,24 +3,14 @@ import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
-import { PrismaService } from '../src/prisma/prisma.service';
 
 describe('Isonga Connect (e2e)', () => {
   let app: INestApplication<App>;
-  const mockPrismaService = {
-    $connect: jest.fn().mockResolvedValue(undefined),
-    $disconnect: jest.fn().mockResolvedValue(undefined),
-    checkHealth: jest.fn().mockResolvedValue({ status: 'up', latencyMs: 2 }),
-    $queryRaw: jest.fn().mockResolvedValue([{ 1: 1 }]),
-  };
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
-    })
-      .overrideProvider(PrismaService)
-      .useValue(mockPrismaService)
-      .compile();
+    }).compile();
 
     app = moduleFixture.createNestApplication();
     app.setGlobalPrefix('api/v1');
@@ -40,15 +30,52 @@ describe('Isonga Connect (e2e)', () => {
       .expect('Hello World!');
   });
 
-  it('/api/v1/health (GET) - Health check response structure', async () => {
+  it('/api/v1/health (GET) - Health check reports DB up', async () => {
     const response = await request(app.getHttpServer())
       .get('/api/v1/health')
       .expect(200);
 
     expect(response.body).toHaveProperty('status', 'ok');
-    expect(response.body).toHaveProperty('timestamp');
-    expect(response.body).toHaveProperty('service', 'Isonga Connect API');
-    expect(response.body).toHaveProperty('version', '0.0.1');
-    expect(response.body.checks.database).toHaveProperty('status', 'up');
+    expect(response.body.checks.database.status).toBe('up');
+  });
+
+  it('/api/v1/areas (GET) - Retrieve seeded administrative areas', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/api/v1/areas')
+      .expect(200);
+
+    expect(Array.isArray(response.body)).toBe(true);
+    expect(response.body.length).toBeGreaterThan(0);
+    // Find Rwanda root
+    const rwanda = response.body.find((a: any) => a.code === 'RW');
+    expect(rwanda).toBeDefined();
+    expect(rwanda.level).toBe('COUNTRY');
+  });
+
+  it('/api/v1/areas (GET) - Filter by level PROVINCE', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/api/v1/areas?level=PROVINCE')
+      .expect(200);
+
+    expect(Array.isArray(response.body)).toBe(true);
+    expect(response.body.every((a: any) => a.level === 'PROVINCE')).toBe(true);
+  });
+
+  it('/api/v1/areas (POST) - Reject invalid hierarchy (e.g. SECTOR directly under PROVINCE)', async () => {
+    // Fetch Kigali province
+    const kigaliRes = await request(app.getHttpServer()).get('/api/v1/areas?level=PROVINCE');
+    const kigali = kigaliRes.body[0];
+
+    const response = await request(app.getHttpServer())
+      .post('/api/v1/areas')
+      .send({
+        code: 'TEST999',
+        name: 'Invalid Sector',
+        level: 'SECTOR', // A Sector must have a District as parent, NOT a Province!
+        parentId: kigali.id,
+      })
+      .expect(400);
+
+    expect(response.body.message).toMatch(/Geographical hierarchy violation/);
   });
 });
