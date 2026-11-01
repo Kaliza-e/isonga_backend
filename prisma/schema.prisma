@@ -1,4 +1,7 @@
-// Prisma schema for Isonga Connect (Isonga C)
+// ==============================================================================
+// Isonga Connect (Isonga C) - Complete Database Schema (PostgreSQL + Prisma)
+// Designed for high-scale civic communications in Rwanda
+// ==============================================================================
 
 generator client {
   provider = "prisma-client-js"
@@ -9,7 +12,372 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// Foundational system metadata model for Phase 1
+// ------------------------------------------------------------------------------
+// ENUMS
+// ------------------------------------------------------------------------------
+
+enum AreaLevel {
+  COUNTRY
+  PROVINCE    // Includes Kigali City (Umujyi wa Kigali)
+  DISTRICT    // Akarere
+  SECTOR      // Umurenge
+  CELL        // Akagari
+  VILLAGE     // Umudugudu
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  DISTRICT_ADMIN
+  SECTOR_ADMIN
+  CELL_ADMIN
+  RESIDENT
+}
+
+enum UserStatus {
+  PENDING_VERIFICATION
+  ACTIVE
+  SUSPENDED
+  DEACTIVATED
+}
+
+enum AnnouncementCategory {
+  COMMUNITY_MEETINGS      // Inama z'abaturage
+  UMUGANDA                // Umuganda rusange
+  PUBLIC_SERVICES         // Serivisi za leta n'izindi
+  HEALTH_INFORMATION      // Amakuru y'ubuzima
+  EDUCATION               // Uburezi
+  ADMINISTRATIVE_NOTICES  // Amatangazo y'ubuyobozi
+  COMMUNITY_EVENTS        // Ibikorwa by'abaturage
+  EMERGENCY               // Amakuru y'ubutabazi bwihuse
+}
+
+enum AnnouncementStatus {
+  DRAFT
+  SCHEDULED
+  PUBLISHED
+  CANCELLED
+  ARCHIVED
+}
+
+enum AnnouncementPriority {
+  NORMAL
+  HIGH
+  EMERGENCY
+}
+
+enum NotificationChannel {
+  SMS
+  PUSH
+  IN_APP
+  WHATSAPP
+}
+
+enum NotificationStatus {
+  PENDING
+  PROCESSING
+  SUBMITTED           // Sent to gateway (NOT proof of delivery)
+  DELIVERED           // Delivery confirmed by carrier/device DLR
+  FAILED
+  CANCELLED
+}
+
+enum AuditAction {
+  USER_LOGIN
+  USER_REGISTER
+  USER_UPDATE
+  PASSWORD_RESET_REQUEST
+  PASSWORD_RESET_SUCCESS
+  ANNOUNCEMENT_CREATE
+  ANNOUNCEMENT_UPDATE
+  ANNOUNCEMENT_PUBLISH
+  ANNOUNCEMENT_SCHEDULE
+  ANNOUNCEMENT_CANCEL
+  PERMISSION_GRANT
+  PERMISSION_REVOKE
+  CONSENT_UPDATE
+  PREFERENCE_UPDATE
+  ADMIN_ACTION
+}
+
+// ------------------------------------------------------------------------------
+// 1. ADMINISTRATIVE GEOGRAPHY (Rwanda Hierarchy)
+// ------------------------------------------------------------------------------
+
+model AdministrativeArea {
+  id          String    @id @default(uuid())
+  code        String    @unique // Official administrative code (e.g. "010101" for Rwanda NISR structure)
+  name        String    // e.g. "Gasabo", "Remera", "Rukiri I"
+  level       AreaLevel
+  parentId    String?   @map("parent_id")
+  path        String    // Materialized path for high-performance subtree queries e.g. "/rwanda/kigali/gasabo"
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  // Relationships
+  parent               AdministrativeArea?      @relation("AreaHierarchy", fields: [parentId], references: [id], onDelete: Restrict)
+  children             AdministrativeArea[]     @relation("AreaHierarchy")
+  residentProfiles     ResidentProfile[]
+  adminPermissions     AdministratorPermission[]
+  announcementTargets  AnnouncementTarget[]
+
+  @@index([level])
+  @@index([parentId])
+  @@index([path])
+  @@map("administrative_areas")
+}
+
+// ------------------------------------------------------------------------------
+// 2. USERS & IDENTITY
+// ------------------------------------------------------------------------------
+
+model User {
+  id                  String      @id @default(uuid())
+  phone               String      @unique // E.164 format (+25078XXXXXXX)
+  phoneVerified       Boolean     @default(false) @map("phone_verified")
+  email               String?     @unique
+  emailVerified       Boolean     @default(false) @map("email_verified")
+  passwordHash        String      @map("password_hash")
+  role                UserRole    @default(RESIDENT)
+  status              UserStatus  @default(PENDING_VERIFICATION)
+  
+  // Security & Verification controls
+  otpHash             String?     @map("otp_hash")
+  otpExpiresAt        DateTime?   @map("otp_expires_at")
+  otpAttempts         Int         @default(0) @map("otp_attempts")
+  lastLoginAt         DateTime?   @map("last_login_at")
+
+  createdAt           DateTime    @default(now()) @map("created_at")
+  updatedAt           DateTime    @updatedAt @map("updated_at")
+  deletedAt           DateTime?   @map("deleted_at")
+
+  // Relationships
+  residentProfile     ResidentProfile?
+  adminPermissions    AdministratorPermission[]
+  announcements       Announcement[]            @relation("AnnouncementAuthor")
+  notificationLogs    NotificationLog[]
+  subscriptions       NotificationSubscription[]
+  auditLogs           AuditLog[]
+
+  @@index([role, status])
+  @@index([phone])
+  @@map("users")
+}
+
+// ------------------------------------------------------------------------------
+// 3. RESIDENT PROFILES & CONSENT (Privacy-by-Design)
+// ------------------------------------------------------------------------------
+
+model ResidentProfile {
+  id                   String              @id @default(uuid())
+  userId               String              @unique @map("user_id")
+  firstName            String              @map("first_name")
+  lastName             String              @map("last_name")
+  preferredLanguage    String              @default("rw") @map("preferred_language") // 'rw' (Kinyarwanda), 'en', 'fr'
+  
+  // Geographic location association (Village level preferred, or Cell)
+  areaId               String              @map("area_id")
+
+  // Consent & Privacy (Rwandan Data Protection Law No 058/2021)
+  consentGiven         Boolean             @default(false) @map("consent_given")
+  consentTimestamp     DateTime?           @map("consent_timestamp")
+  consentVersion       String?             @map("consent_version") // e.g. "v1.0"
+  
+  createdAt            DateTime            @default(now()) @map("created_at")
+  updatedAt            DateTime            @updatedAt @map("updated_at")
+
+  // Relationships
+  user                 User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  area                 AdministrativeArea  @relation(fields: [areaId], references: [id], onDelete: Restrict)
+  preference           NotificationPreference?
+
+  @@index([areaId])
+  @@map("resident_profiles")
+}
+
+// ------------------------------------------------------------------------------
+// 4. ADMINISTRATOR GEOGRAPHICAL PERMISSIONS (Scope Enforcement)
+// ------------------------------------------------------------------------------
+
+model AdministratorPermission {
+  id                     String             @id @default(uuid())
+  userId                 String             @map("user_id")
+  areaId                 String             @map("area_id")
+  canPublish             Boolean            @default(true) @map("can_publish")
+  canSchedule            Boolean            @default(true) @map("can_schedule")
+  canBroadcastEmergency  Boolean            @default(false) @map("can_broadcast_emergency")
+  grantedAt              DateTime           @default(now()) @map("granted_at")
+  grantedById            String?            @map("granted_by_id")
+
+  // Relationships
+  user                   User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  area                   AdministrativeArea @relation(fields: [areaId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, areaId])
+  @@index([userId])
+  @@index([areaId])
+  @@map("administrator_permissions")
+}
+
+// ------------------------------------------------------------------------------
+// 5. ANNOUNCEMENTS & TARGETING
+// ------------------------------------------------------------------------------
+
+model Announcement {
+  id               String               @id @default(uuid())
+  title            String
+  content          String               // Clean announcement body
+  category         AnnouncementCategory
+  priority         AnnouncementPriority @default(NORMAL)
+  status           AnnouncementStatus   @default(DRAFT)
+  
+  authorId         String               @map("author_id")
+  scheduledAt      DateTime?            @map("scheduled_at")
+  publishedAt      DateTime?            @map("published_at")
+  cancelledAt      DateTime?            @map("cancelled_at")
+  cancelledReason  String?              @map("cancelled_reason")
+
+  // Metrics cache for instant admin feed lookup
+  recipientCount   Int                  @default(0) @map("recipient_count")
+
+  createdAt        DateTime             @default(now()) @map("created_at")
+  updatedAt        DateTime             @updatedAt @map("updated_at")
+
+  // Relationships
+  author           User                 @relation("AnnouncementAuthor", fields: [authorId], references: [id], onDelete: Restrict)
+  targets          AnnouncementTarget[]
+  notificationLogs NotificationLog[]
+
+  @@index([status, scheduledAt])
+  @@index([category])
+  @@index([authorId])
+  @@index([createdAt])
+  @@map("announcements")
+}
+
+model AnnouncementTarget {
+  id                  String             @id @default(uuid())
+  announcementId      String             @map("announcement_id")
+  areaId              String             @map("area_id")
+  includeSubordinates Boolean            @default(true) @map("include_subordinates")
+
+  // Relationships
+  announcement        Announcement       @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  area                AdministrativeArea @relation(fields: [areaId], references: [id], onDelete: Restrict)
+
+  @@unique([announcementId, areaId])
+  @@index([announcementId])
+  @@index([areaId])
+  @@map("announcement_targets")
+}
+
+// ------------------------------------------------------------------------------
+// 6. NOTIFICATION PREFERENCES & SUBSCRIPTIONS
+// ------------------------------------------------------------------------------
+
+model NotificationPreference {
+  id                   String           @id @default(uuid())
+  profileId            String           @unique @map("profile_id")
+  
+  // Channels
+  smsEnabled           Boolean          @default(true) @map("sms_enabled")
+  pushEnabled          Boolean          @default(true) @map("push_enabled")
+  inAppEnabled         Boolean          @default(true) @map("in_app_enabled")
+  whatsappEnabled      Boolean          @default(false) @map("whatsapp_enabled")
+
+  // Category opt-ins (Emergencies cannot be disabled by policy)
+  communityMeetings    Boolean          @default(true) @map("community_meetings")
+  umuganda             Boolean          @default(true) @map("umuganda")
+  publicServices       Boolean          @default(true) @map("public_services")
+  healthInfo           Boolean          @default(true) @map("health_info")
+  education            Boolean          @default(true) @map("education")
+  administrativeNotice Boolean          @default(true) @map("administrative_notice")
+  communityEvents      Boolean          @default(true) @map("community_events")
+
+  updatedAt            DateTime         @updatedAt @map("updated_at")
+
+  // Relationships
+  profile              ResidentProfile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@map("notification_preferences")
+}
+
+model NotificationSubscription {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  token       String   @unique // FCM device token
+  deviceType  String?  @map("device_type") // e.g. "android", "ios", "web"
+  userAgent   String?  @map("user_agent")
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relationships
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isActive])
+  @@map("notification_subscriptions")
+}
+
+// ------------------------------------------------------------------------------
+// 7. NOTIFICATION LOGS & AUDIT TRAILS
+// ------------------------------------------------------------------------------
+
+model NotificationLog {
+  id              String              @id @default(uuid())
+  announcementId  String              @map("announcement_id")
+  userId          String              @map("user_id")
+  channel         NotificationChannel
+  status          NotificationStatus  @default(PENDING)
+  
+  // Destination contact info masked for audit, stored temporarily for dispatch
+  recipient       String              // Phone or FCM token
+  providerRef     String?             @map("provider_ref") // Message ID from SMS gateway or FCM
+  providerResponse Json?              @map("provider_response")
+  errorMessage    String?             @map("error_message")
+  retryCount      Int                 @default(0) @map("retry_count")
+  
+  submittedAt     DateTime?           @map("submitted_at")
+  deliveredAt     DateTime?           @map("delivered_at")
+  createdAt       DateTime            @default(now()) @map("created_at")
+  updatedAt       DateTime            @updatedAt @map("updated_at")
+
+  // Relationships
+  announcement    Announcement        @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  user            User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([announcementId, channel, status])
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("notification_logs")
+}
+
+model AuditLog {
+  id          String      @id @default(uuid())
+  userId      String?     @map("user_id") // Nullable for anonymous/unauthenticated events (e.g. failed login attempts)
+  action      AuditAction
+  resource    String      // Target entity e.g. "Announcement", "User", "Permission"
+  resourceId  String?     @map("resource_id")
+  details     Json?       // Structured metadata (no passwords or OTP secrets)
+  ipAddress   String?     @map("ip_address")
+  userAgent   String?     @map("user_agent")
+  createdAt   DateTime    @default(now()) @map("created_at")
+
+  // Relationships
+  user        User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([action])
+  @@index([userId])
+  @@index([resource, resourceId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// ------------------------------------------------------------------------------
+// 8. SYSTEM CONFIGURATION & METADATA
+// ------------------------------------------------------------------------------
+
 model SystemSetting {
   id        String   @id @default(uuid())
   key       String   @unique
