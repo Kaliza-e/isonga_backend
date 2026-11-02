@@ -6,6 +6,7 @@ import { HealthModule } from './health/health.module';
 import { AreasModule } from './modules/areas/areas.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
+import { ResidentsModule } from './modules/residents/residents.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
@@ -20,6 +21,7 @@ import { AppService } from './app.service';
     AreasModule,
     AuthModule,
     UsersModule,
+    ResidentsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

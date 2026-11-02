@@ -84,7 +84,7 @@ describe('Isonga Connect (e2e)', () => {
   });
 
   it('/api/v1/auth/register (POST) & verify-otp - Resident registration flow', async () => {
-    const testPhone = '+250789999001';
+    const testPhone = `+25078${Math.floor(1000000 + Math.random() * 9000000)}`;
 
     // 1. Register resident
     const regRes = await request(app.getHttpServer())
