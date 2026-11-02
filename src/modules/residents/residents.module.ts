@@ -10,3 +10,4 @@ import { AreasModule } from '../areas/areas.module';
   exports: [ResidentsService],
 })
 export class ResidentsModule {}
+

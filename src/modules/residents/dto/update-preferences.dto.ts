@@ -52,3 +52,4 @@ export class UpdateNotificationPreferencesDto {
   @IsBoolean()
   communityEvents?: boolean;
 }
+

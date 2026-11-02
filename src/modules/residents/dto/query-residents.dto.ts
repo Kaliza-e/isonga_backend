@@ -12,3 +12,4 @@ export class QueryResidentsDto {
   @IsString()
   search?: string;
 }
+

@@ -10,3 +10,4 @@ export class UpdateConsentDto {
   @IsBoolean()
   consentGiven!: boolean;
 }
+

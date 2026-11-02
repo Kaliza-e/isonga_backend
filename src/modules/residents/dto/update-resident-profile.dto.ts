@@ -20,3 +20,4 @@ export class UpdateResidentProfileDto {
   @IsString()
   preferredLanguage?: string;
 }
+
