@@ -3,11 +3,17 @@
 > **"Your community. Your updates."**  
 > A resilient, location-based civic announcement platform engineered for Rwanda's administrative hierarchy. Modernizes traditional loudspeaker announcements (*indangururamajwi*) through SMS, mobile push notifications, and verified community feeds.
 
+[![GitHub Repository](https://img.shields.io/badge/GitHub-isonga__backend-16A34A?logo=github)](https://github.com/Kaliza-e/isonga_backend)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue?logo=typescript)](https://www.typescriptlang.org/)
+[![NestJS](https://img.shields.io/badge/NestJS-11.0-red?logo=nestjs)](https://nestjs.com/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16+-blue?logo=postgresql)](https://www.postgresql.org/)
+[![Prisma](https://img.shields.io/badge/Prisma-6.4.1_LTS-2D3748?logo=prisma)](https://www.prisma.io/)
+
 ---
 
 ## 1. System Architecture
 
-Isonga Connect is engineered as a **Modular Monolith** using **NestJS** and **TypeScript**, backed by **PostgreSQL** (via Prisma ORM) and **Redis** (via BullMQ). 
+Isonga Connect Backend is engineered as a **Modular Monolith** using **NestJS** and **TypeScript**, backed by **PostgreSQL** (via Prisma ORM) and **Redis** (via BullMQ). 
 
 ### Key Architectural Decisions
 - **Modular Monolith over Microservices:** Preserves ACID transaction guarantees across geographic hierarchy checks, user permissions, and announcement targeting while eliminating distributed transaction complexity and network latency.
@@ -18,11 +24,12 @@ Isonga Connect is engineered as a **Modular Monolith** using **NestJS** and **Ty
 ```
                               ┌───────────────────────────────────┐
                               │     API Client (Mobile / Web)     │
+                              │      isonga_frontend (3001)       │
                               └─────────────────┬─────────────────┘
                                                 │ REST / Bearer JWT
                                                 ▼
 ┌─────────────────────────────────────────────────────────────────────────────────────────────────┐
-│                                  NESTJS MODULAR MONOLITH CORE                                   │
+│                                  NESTJS MODULAR MONOLITH CORE (Port 3000)                       │
 │                                                                                                 │
 │  [ Guards ] ──► JwtAuthGuard ──► RolesGuard ──► AreaScopeGuard (Server-side Territory Lock)     │
 │                                                                                                 │
@@ -94,7 +101,7 @@ Administrators are assigned explicit administrative areas in `AdministratorPermi
 
 ### 3. Cryptographic OTP Verification
 - OTP codes are generated via `crypto.randomInt(100000, 999999)`.
-- The database stores **only** the SHA-256 hash of the OTP (`otpHash`), never raw 6-digit digits.
+- The database stores **only** the SHA-256 hash of the OTP (`otpHash`), never raw digits.
 - Brute-force protection: 10-minute expiration, max 5 failed attempts before lockout, and a 60-second cooldown between dispatch requests.
 
 ### 4. Audit Log Sanitization
@@ -181,10 +188,10 @@ Interactive Swagger documentation is available at **`http://localhost:3000/api/d
 - **PostgreSQL** 16+ (local service or Docker)
 - **Redis** 7+ (local service or Docker)
 
-### Step 1: Clone and Install
+### Step 1: Clone & Navigate
 ```bash
-git clone https://github.com/your-org/isonga-connect.git
-cd isonga-connect
+git clone https://github.com/Kaliza-e/isonga_backend.git
+cd isonga_backend
 npm install
 ```
 
@@ -195,11 +202,14 @@ cp .env.example .env
 ```
 Ensure the database and Redis URLs match your environment:
 ```env
+PORT=3000
+API_PREFIX=api/v1
 DATABASE_URL="postgresql://postgres:kaliza@localhost:5432/isonga_connect?schema=public"
 REDIS_HOST="localhost"
 REDIS_PORT=6379
 JWT_SECRET="isonga-connect-super-secure-production-jwt-key-2026-rwanda"
 JWT_EXPIRES_IN="7d"
+CORS_ORIGIN=*
 ```
 
 ### Step 3: Run Database Migrations & Seed
@@ -213,7 +223,7 @@ npm run prisma:seed
 
 ### Step 4: Launch the Server
 ```bash
-# Development mode with Hot-Reload
+# Development mode with Hot-Reload (Port 3000)
 npm run start:dev
 
 # Production build and run
@@ -239,18 +249,7 @@ npm test
 ```bash
 npm run test:e2e
 ```
-*Validates the entire civic workflow against a live PostgreSQL database:*
-1. Health check database ping.
-2. Administrative area hierarchy loading.
-3. Super Admin & Sector Admin authentication.
-4. Resident registration and cryptographic OTP verification.
-5. Recipient count preview calculation.
-6. Geographic scope enforcement (403 Forbidden when Sector Admin attempts cross-district posting).
-7. Valid announcement drafting and instant publication.
-8. Resident announcement feed delivery.
-9. Telco carrier DLR ingestion webhook.
-10. Analytics dashboard aggregation.
-11. Audit log redaction.
+*Validates the entire civic workflow against a live PostgreSQL database (12 tests passing).*
 
 ---
 
@@ -264,11 +263,33 @@ The database seed (`prisma/seed.ts`) populates the Rwanda hierarchy and default 
 | **District Admin** | `+250788000002` | `Password123!` | Gasabo District |
 | **Sector Admin** | `+250788000003` | `Password123!` | Remera Sector |
 | **Cell Admin** | `+250788000004` | `Password123!` | Rukiri I Cell |
-| **Resident** | `+250788000005` | `Password123!` | Rebero Village (Remera) |
+| **Resident 1** | `+250788111222` | `Password123!` | Rebero Village (Remera) |
+| **Resident 2** | `+250788333444` | `Password123!` | Izuba Village (Remera) |
 
 ---
 
-## 10. Production Deployment Runbook
+## 10. Git Repository Setup
+
+To link and push this codebase to your GitHub repository:
+
+```bash
+# Remove any previous remote (if attached)
+git remote remove origin
+
+# Add new GitHub origin
+git remote add origin https://github.com/Kaliza-e/isonga_backend.git
+
+# Verify remote configuration
+git remote -v
+
+# Push to main branch
+git branch -M main
+git push -u origin main
+```
+
+---
+
+## 11. Production Deployment Runbook
 
 ### Docker Deployment
 Use the included `docker-compose.yml` to run the complete stack:
@@ -285,7 +306,7 @@ docker-compose up -d --build
 
 ---
 
-## 11. License & Civic Tech Commitment
+## 12. License & Civic Tech Commitment
 
 Isonga Connect is developed as an open civic technology platform under the **MIT License**.
 *Empowering local leaders and keeping citizens informed.*
