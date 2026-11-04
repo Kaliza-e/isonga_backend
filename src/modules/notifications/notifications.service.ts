@@ -238,6 +238,35 @@ export class NotificationsService {
   }
 
   /**
+   * Retrieve platform-wide notification logs (Admin)
+   */
+  async getAllLogs(take = 100, skip = 0) {
+    const [total, logs] = await Promise.all([
+      this.prisma.notificationLog.count(),
+      this.prisma.notificationLog.findMany({
+        orderBy: { createdAt: 'desc' },
+        take,
+        skip,
+        include: {
+          announcement: {
+            select: {
+              id: true,
+              title: true,
+              category: true,
+              urgency: true,
+            },
+          },
+        },
+      }),
+    ]);
+
+    return {
+      total,
+      data: logs,
+    };
+  }
+
+  /**
    * Retrieve notification history for an announcement (Admin)
    */
   async getLogsForAnnouncement(announcementId: string) {

@@ -6,9 +6,10 @@ import {
   HttpStatus,
   Param,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiParam, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 import { NotificationsService } from './notifications.service';
 import { Public } from '../../common/decorators/public.decorator';
@@ -20,6 +21,30 @@ import { Roles } from '../../common/decorators/roles.decorator';
 @Controller('notifications')
 export class NotificationsController {
   constructor(private readonly notificationsService: NotificationsService) {}
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(
+    UserRole.SUPER_ADMIN,
+    UserRole.DISTRICT_ADMIN,
+    UserRole.SECTOR_ADMIN,
+    UserRole.CELL_ADMIN,
+  )
+  @ApiBearerAuth('JWT-auth')
+  @Get()
+  @ApiOperation({
+    summary: 'Get all notification logs (Admin only)',
+    description: 'Retrieve platform-wide notification delivery logs with carrier status.',
+  })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiQuery({ name: 'offset', required: false, type: Number })
+  async getAllLogs(
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+  ) {
+    const take = limit ? parseInt(limit, 10) : 100;
+    const skip = offset ? parseInt(offset, 10) : 0;
+    return this.notificationsService.getAllLogs(take, skip);
+  }
 
   @Public()
   @Post('webhooks/sms')
