@@ -28,6 +28,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { Public } from '../../common/decorators/public.decorator';
 
 @ApiTags('Announcements')
 @ApiBearerAuth('JWT-auth')
@@ -76,14 +77,18 @@ export class AnnouncementsController {
     return this.announcementsService.previewRecipients(adminUser, dto);
   }
 
+  @Public()
   @Get('feed')
   @ApiOperation({
     summary: 'Get resident community announcement feed',
     description:
       'Retrieves verified community announcements relevant to the resident registered village, cell, sector, or district.',
   })
-  async getFeedForResident(@CurrentUser('id') userId: string) {
-    return this.announcementsService.getFeedForResident(userId);
+  async getFeedForResident(
+    @CurrentUser('id') userId?: string,
+    @Query('villageId') villageId?: string,
+  ) {
+    return this.announcementsService.getFeedForResident(userId, villageId);
   }
 
   @Get()

@@ -410,32 +410,49 @@ export class AnnouncementsService {
    * Resident Announcement Feed:
    * Returns published announcements targeted to the resident's village or any of its ancestor areas
    */
-  async getFeedForResident(userId: string) {
-    const profile = await this.prisma.residentProfile.findUnique({
-      where: { userId },
-      include: {
-        area: true,
-        preference: true,
-      },
-    });
+  async getFeedForResident(userId?: string, villageId?: string) {
+    let targetAreaId = villageId;
+    let pref: any = null;
 
-    if (!profile) {
-      throw new NotFoundException('Resident profile not found.');
+    if (userId) {
+      const profile = await this.prisma.residentProfile.findUnique({
+        where: { userId },
+        include: {
+          area: true,
+          preference: true,
+        },
+      });
+
+      if (profile) {
+        targetAreaId = targetAreaId || profile.areaId;
+        pref = profile.preference;
+      }
     }
 
-    // Get ancestor areas for the resident's location
-    const ancestors = await this.areasService.getAncestors(profile.areaId);
-    const relevantAreaIds = [profile.areaId, ...ancestors.map((a) => a.id)];
+    let relevantAreaIds: string[] = [];
+    if (targetAreaId) {
+      try {
+        const ancestors = await this.areasService.getAncestors(targetAreaId);
+        relevantAreaIds = [targetAreaId, ...ancestors.map((a) => a.id)];
+      } catch {
+        relevantAreaIds = [targetAreaId];
+      }
+    }
+
+    const where: any = {
+      status: AnnouncementStatus.PUBLISHED,
+    };
+
+    if (relevantAreaIds.length > 0) {
+      where.targets = {
+        some: {
+          areaId: { in: relevantAreaIds },
+        },
+      };
+    }
 
     const announcements = await this.prisma.announcement.findMany({
-      where: {
-        status: AnnouncementStatus.PUBLISHED,
-        targets: {
-          some: {
-            areaId: { in: relevantAreaIds },
-          },
-        },
-      },
+      where,
       include: {
         targets: {
           include: {
@@ -444,12 +461,20 @@ export class AnnouncementsService {
             },
           },
         },
+        author: {
+          select: {
+            id: true,
+            role: true,
+            residentProfile: {
+              select: { firstName: true, lastName: true },
+            },
+          },
+        },
       },
       orderBy: [{ priority: 'desc' }, { publishedAt: 'desc' }],
+      take: 50,
     });
 
-    // Filter out categories resident opted out from (except emergencies)
-    const pref = profile.preference;
     if (!pref) {
       return announcements;
     }
@@ -458,7 +483,7 @@ export class AnnouncementsService {
       if (ann.priority === AnnouncementPriority.EMERGENCY) {
         return true; // Emergencies cannot be suppressed
       }
-      return true; // Return all or filter according to preference
+      return true;
     });
   }
 }

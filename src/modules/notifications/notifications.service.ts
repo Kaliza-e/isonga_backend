@@ -253,7 +253,7 @@ export class NotificationsService {
               id: true,
               title: true,
               category: true,
-              urgency: true,
+              priority: true,
             },
           },
         },
