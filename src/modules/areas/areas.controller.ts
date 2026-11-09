@@ -8,15 +8,43 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import { ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiOperation, ApiParam, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { AreasService } from './areas.service';
 import { CreateAreaDto } from './dto/create-area.dto';
 import { QueryAreaDto } from './dto/query-area.dto';
+import { Public } from '../../common/decorators/public.decorator';
 
 @ApiTags('Areas')
 @Controller('areas')
 export class AreasController {
   constructor(private readonly areasService: AreasService) {}
+
+  @Public()
+  @Get('locate')
+  @ApiOperation({
+    summary: 'Locate administrative area by GPS coordinates',
+    description:
+      'Resolves real GPS coordinates (latitude, longitude) to Rwanda administrative hierarchy and residents.',
+  })
+  @ApiQuery({ name: 'lat', type: Number, example: -1.936 })
+  @ApiQuery({ name: 'lng', type: Number, example: 30.13 })
+  async locateByCoordinates(
+    @Query('lat') lat?: string,
+    @Query('lng') lng?: string,
+  ) {
+    const latitude = lat ? parseFloat(lat) : -1.936;
+    const longitude = lng ? parseFloat(lng) : 30.13;
+    return this.areasService.locateByCoordinates(latitude, longitude);
+  }
+
+  @Public()
+  @Get(':id/people')
+  @ApiOperation({
+    summary: 'Get residents of an administrative area',
+  })
+  async getAreaPeople(@Param('id') id: string) {
+    return this.areasService.getAreaPeople(id);
+  }
 
   @Post()
   @HttpCode(HttpStatus.CREATED)

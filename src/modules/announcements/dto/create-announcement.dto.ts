@@ -68,6 +68,13 @@ export class CreateAnnouncementDto {
   includeSubordinates?: boolean;
 
   @ApiPropertyOptional({
+    description: 'Channels to dispatch announcement across (SMS, PUSH, IN_APP, WHATSAPP)',
+  })
+  @IsOptional()
+  @IsArray()
+  channels?: string[];
+
+  @ApiPropertyOptional({
     description: 'Future ISO timestamp if scheduling publication',
     example: '2026-11-05T08:00:00.000Z',
   })

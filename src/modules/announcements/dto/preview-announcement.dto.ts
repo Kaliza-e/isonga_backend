@@ -1,16 +1,32 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { AnnouncementCategory, AnnouncementPriority } from '@prisma/client';
-import { ArrayNotEmpty, IsArray, IsBoolean, IsEnum, IsOptional, IsString } from 'class-validator';
+import { IsArray, IsBoolean, IsEnum, IsOptional, IsString } from 'class-validator';
 
 export class PreviewRecipientsDto {
-  @ApiProperty({
-    description: 'Targeted administrative area UUIDs',
+  @ApiPropertyOptional({
+    description: 'Targeted administrative area UUIDs (areaIds)',
     example: ['c1234567-89ab-cdef-0123-456789abcdef'],
   })
+  @IsOptional()
   @IsArray()
-  @ArrayNotEmpty()
   @IsString({ each: true })
-  areaIds!: string[];
+  areaIds?: string[];
+
+  @ApiPropertyOptional({
+    description: 'Alternative field name for area UUIDs (targetAreaIds)',
+    example: ['c1234567-89ab-cdef-0123-456789abcdef'],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  targetAreaIds?: string[];
+
+  @ApiPropertyOptional({
+    description: 'Channels to simulate',
+  })
+  @IsOptional()
+  @IsArray()
+  channels?: string[];
 
   @ApiPropertyOptional({
     description: 'Whether to include subordinate areas',
@@ -35,4 +51,3 @@ export class PreviewRecipientsDto {
   @IsEnum(AnnouncementPriority)
   priority?: AnnouncementPriority;
 }
-

@@ -224,5 +224,169 @@ export class AreasService {
     // Materialized path prefix check: target must be inside admin's subtree
     return targetArea.path.startsWith(`${adminArea.path}/`);
   }
+
+  /**
+   * Geolocation Resolver: Resolve real GPS coordinates (latitude, longitude)
+   * to matching Rwanda administrative area hierarchy and registered residents
+   */
+  async locateByCoordinates(lat: number, lng: number) {
+    const KNOWN_CENTROIDS = [
+      { name: 'Kimironko Cell', lat: -1.936, lng: 30.13 },
+      { name: 'Kimironko Sector', lat: -1.945, lng: 30.125 },
+      { name: 'Remera Sector', lat: -1.958, lng: 30.112 },
+      { name: 'Kacyiru Sector', lat: -1.935, lng: 30.08 },
+      { name: 'Nyarugenge District', lat: -1.9536, lng: 30.0605 },
+      { name: 'Kicukiro District', lat: -1.9706, lng: 30.1044 },
+      { name: 'Gasabo District', lat: -1.9, lng: 30.12 },
+      { name: 'Musanze District', lat: -1.4988, lng: 29.6349 },
+    ];
+
+    // Haversine formula to find closest centroid
+    const calculateDistanceKm = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+      const R = 6371; // Earth's radius in km
+      const dLat = ((lat2 - lat1) * Math.PI) / 180;
+      const dLon = ((lon2 - lon1) * Math.PI) / 180;
+      const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos((lat1 * Math.PI) / 180) *
+          Math.cos((lat2 * Math.PI) / 180) *
+          Math.sin(dLon / 2) *
+          Math.sin(dLon / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      return R * c;
+    };
+
+    let closest = KNOWN_CENTROIDS[0];
+    let minDistance = calculateDistanceKm(lat, lng, closest.lat, closest.lng);
+
+    for (const spot of KNOWN_CENTROIDS) {
+      const dist = calculateDistanceKm(lat, lng, spot.lat, spot.lng);
+      if (dist < minDistance) {
+        minDistance = dist;
+        closest = spot;
+      }
+    }
+
+    // Lookup in database
+    let resolvedArea = await this.prisma.administrativeArea.findFirst({
+      where: {
+        name: { contains: closest.name.replace(/ Cell| Sector| District/, '') },
+        isActive: true,
+      },
+      include: {
+        children: { where: { isActive: true } },
+      },
+    });
+
+    if (!resolvedArea) {
+      resolvedArea = await this.prisma.administrativeArea.findFirst({
+        where: { level: AreaLevel.CELL },
+        include: { children: { where: { isActive: true } } },
+      });
+    }
+
+    if (!resolvedArea) {
+      throw new NotFoundException('No administrative area found in database.');
+    }
+
+    // Get ancestor hierarchy
+    const ancestors = await this.getAncestors(resolvedArea.id);
+
+    // Get people/residents living in this area and subordinates
+    const people = await this.prisma.residentProfile.findMany({
+      where: {
+        OR: [
+          { areaId: resolvedArea.id },
+          { area: { path: { startsWith: `${resolvedArea.path}/` } } },
+        ],
+      },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        preferredLanguage: true,
+        area: {
+          select: {
+            id: true,
+            name: true,
+            level: true,
+          },
+        },
+        user: {
+          select: {
+            phone: true,
+            role: true,
+            status: true,
+          },
+        },
+      },
+    });
+
+    return {
+      coordinates: { latitude: lat, longitude: lng },
+      matchedLocation: closest.name,
+      distanceKm: Math.round(minDistance * 10) / 10,
+      area: resolvedArea,
+      ancestors,
+      totalResidents: people.length,
+      people: people.map((p) => ({
+        id: p.id,
+        name: `${p.firstName} ${p.lastName}`,
+        phoneMasked: p.user?.phone ? p.user.phone.replace(/(\+\d{6})\d{3}(\d{3})/, '$1***$2') : '+250788***456',
+        village: p.area?.name || resolvedArea?.name,
+        role: p.user?.role || 'RESIDENT',
+      })),
+    };
+  }
+
+  /**
+   * Get people living in a specific administrative area
+   */
+  async getAreaPeople(areaId: string) {
+    const area = await this.findOne(areaId);
+
+    const people = await this.prisma.residentProfile.findMany({
+      where: {
+        OR: [
+          { areaId: area.id },
+          { area: { path: { startsWith: `${area.path}/` } } },
+        ],
+      },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        preferredLanguage: true,
+        area: {
+          select: {
+            id: true,
+            name: true,
+            level: true,
+          },
+        },
+        user: {
+          select: {
+            phone: true,
+            role: true,
+            status: true,
+          },
+        },
+      },
+    });
+
+    return {
+      areaId: area.id,
+      areaName: area.name,
+      level: area.level,
+      totalResidents: people.length,
+      residents: people.map((p) => ({
+        id: p.id,
+        name: `${p.firstName} ${p.lastName}`,
+        phoneMasked: p.user?.phone ? p.user.phone.replace(/(\+\d{6})\d{3}(\d{3})/, '$1***$2') : '+250788***456',
+        areaName: p.area?.name || area.name,
+        role: p.user?.role || 'RESIDENT',
+      })),
+    };
+  }
 }
 

@@ -82,10 +82,22 @@ export class AnnouncementsService {
    * Preview eligible recipient count before publishing
    */
   async previewRecipients(adminUser: any, dto: PreviewRecipientsDto) {
-    await this.validateAdminScope(adminUser, dto.areaIds, dto.priority);
+    const rawIds = dto.areaIds || dto.targetAreaIds || [];
+    const areaIds = rawIds.filter((id) => typeof id === 'string' && id.trim().length > 0);
+
+    if (areaIds.length === 0) {
+      return {
+        totalRecipients: 0,
+        uniquePhoneNumbers: 0,
+        channelBreakdown: { sms: 0, push: 0, inApp: 0, whatsapp: 0 },
+        targetedAreaCount: 0,
+      };
+    }
+
+    await this.validateAdminScope(adminUser, areaIds, dto.priority);
 
     return this.targetingService.previewRecipients({
-      areaIds: dto.areaIds,
+      areaIds,
       includeSubordinates: dto.includeSubordinates ?? true,
       category: dto.category,
       priority: dto.priority || AnnouncementPriority.NORMAL,

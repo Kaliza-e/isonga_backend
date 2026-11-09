@@ -170,9 +170,13 @@ export class AuthService {
    * Login user with Phone or Email and password
    */
   async login(dto: LoginDto) {
-    const isEmail = dto.identifier.includes('@');
+    const rawIdentifier = dto.identifier || dto.phone;
+    if (!rawIdentifier) {
+      throw new BadRequestException('Phone number or email identifier is required.');
+    }
+    const isEmail = rawIdentifier.includes('@');
     const user = await this.prisma.user.findFirst({
-      where: isEmail ? { email: dto.identifier } : { phone: dto.identifier },
+      where: isEmail ? { email: rawIdentifier } : { phone: rawIdentifier },
       include: {
         residentProfile: {
           include: {
