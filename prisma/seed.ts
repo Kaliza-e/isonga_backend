@@ -237,7 +237,92 @@ async function main() {
 
   console.log(`👤 Created Administrator: ${admin.email} (Role: ${admin.role})`);
   console.log('🔒 Password: Password123!');
-  console.log('✅ Clean database setup complete. No dummy residents or mock announcements created.');
+
+  // 5. Seed Test Community Resident
+  const residentPasswordHash = await bcrypt.hash('Password123!', 10);
+  const resident = await prisma.user.create({
+    data: {
+      email: 'jeanluc.mugisha@isonga.rw',
+      phone: '+250788123456',
+      phoneVerified: true,
+      emailVerified: true,
+      passwordHash: residentPasswordHash,
+      role: UserRole.RESIDENT,
+      status: UserStatus.ACTIVE,
+      residentProfile: {
+        create: {
+          firstName: 'Jean-Luc',
+          lastName: 'Mugisha',
+          preferredLanguage: 'rw',
+          area: { connect: { id: reberoVillage.id } },
+          consentGiven: true,
+          consentTimestamp: new Date(),
+          consentVersion: 'v1.0',
+        },
+      },
+    },
+  });
+
+  console.log(`👤 Created Resident: ${resident.phone} (${resident.email})`);
+  console.log('🔒 Password: Password123!');
+
+  // 6. Seed Realistic Community Announcements for Kimironko & Gasabo
+  await prisma.announcement.create({
+    data: {
+      title: 'Umuganda Rusange: Drainage Clearing & Tree Planting',
+      content:
+        'All residents of Kimironko Cell and Rebero Village are requested to gather at 07:00 AM this Saturday at the main road junction for general drainage culvert clearing and tree planting. Community assembly will follow at 10:30 AM.',
+      category: 'UMUGANDA',
+      priority: 'HIGH',
+      status: 'PUBLISHED',
+      authorId: admin.id,
+      publishedAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
+      targets: {
+        create: [
+          { areaId: kimironkoCell.id },
+        ],
+      },
+    },
+  });
+
+  await prisma.announcement.create({
+    data: {
+      title: 'Community Health Drive: Routine Vaccinations & Nutrition Screening',
+      content:
+        'Kimironko Health Centre in collaboration with community health workers (Abajyanama b\'Ubuzima) is organizing free immunization and child growth monitoring sessions at the cell office from Monday to Wednesday.',
+      category: 'HEALTH_INFORMATION',
+      priority: 'NORMAL',
+      status: 'PUBLISHED',
+      authorId: admin.id,
+      publishedAt: new Date(Date.now() - 14 * 60 * 60 * 1000),
+      targets: {
+        create: [
+          { areaId: kimironko.id },
+        ],
+      },
+    },
+  });
+
+  await prisma.announcement.create({
+    data: {
+      title: 'WASAC Notice: Scheduled Water Infrastructure Maintenance',
+      content:
+        'Water and Sanitation Corporation (WASAC) informs residents in Kimironko and Bibare zones that scheduled pipe modernization will take place on Thursday between 08:30 AM and 04:30 PM. Water supply will be temporarily paused.',
+      category: 'PUBLIC_SERVICES',
+      priority: 'NORMAL',
+      status: 'PUBLISHED',
+      authorId: admin.id,
+      publishedAt: new Date(Date.now() - 28 * 60 * 60 * 1000),
+      targets: {
+        create: [
+          { areaId: gasabo.id },
+        ],
+      },
+    },
+  });
+
+  console.log('📢 Seeded Authentic Rwanda Announcements for Gasabo / Kimironko.');
+  console.log('✅ Database setup complete with Administrator and Resident seeded accounts.');
 }
 
 main()
